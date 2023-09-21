@@ -1,3 +1,10 @@
+#This is a script for using this pi HAT hardware 
+#That uses a GPIO pin to turn on a relay
+#But I couldnt find documentation on what pins
+#It uses so this is a script that does trial and error
+#and I just ran this script and watched the relay
+#In this case on the 2 relay hat for the pi Zero
+# it was pins 5 and 22
 import RPi.GPIO as GPIO
 import time
 
