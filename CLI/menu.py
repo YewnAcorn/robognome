@@ -4,8 +4,9 @@ import os
 import time
 import plant_art
 import random
+from typing import Literal, Union, cast
 
-
+ValveId = Literal["A", "B"]
 # GPIO.setmode(GPIO.BCM)
 # GPIO.setup(pi_pin, GPIO.OUT)
 
@@ -50,97 +51,64 @@ def show_menu():
     print(f"[{choice}]")
     return choice
 
-def change_status_A(switch):
+def change_status(switch: Literal["on", "off"], valve_id: ValveId):
     if switch == "on" or switch == "off":
-        with open('statusA', 'w') as f:
+        with open(f"status{valve_id}", 'w') as f:
             f.write(str(switch))
     else:
-        print(">>>Invalid input {switch} please enter on or off<<<")
+        print(f">>>Invalid input {switch} please enter on or off<<<")
 
-def change_status_B(switch):
-    if switch == "on" or switch == "off":
-        with open('statusB', 'w') as f:
-            f.write(str(switch))
-    else:
-        print(">>>Invalid input {switch} please enter on or off<<<")
-
-def get_status_A():
-    with open('statusA', 'r') as f:
+def get_status(valve_id: ValveId):
+    with open(f"status{valve_id}", 'r') as f:
         status = f.read().strip()
-    print(f"A status: {status}")
+    print(f"{valve_id} status: {status}")
+
     return status
 
-def get_status_B():
-    with open('statusB', 'r') as f:
-        status = f.read().strip()
-    print(f"B status: {status}")
-    return status
-
-def turn_water_on(pi_pin):
+def turn_water_on(valve_id: ValveId):
     print("Turning water on")
     t = time.localtime()
     time_on = time.strftime("%H:%M:%S", t)
     print(f"watering @ {time_on}")
  #   GPIO.output(pi_pin, GPIO.HIGH)
-    if pi_pin == 5:
-        change_status_A("on")
-    elif pi_pin == 22:
-        change_status_B("on")
+    change_status("on", valve_id)
     water_log()
 
-def turn_water_off(pi_pin):
+def turn_water_off(valve_id: ValveId):
     print("Turning water off")
     t = time.localtime()
     time_off = time.strftime("%H:%M:%S", t)
     print(f"valve closed @ {time_off}")
  #   GPIO.output(pi_pin, GPIO.LOW)
-    if pi_pin == 5:
-        change_status_A("off")
-    elif pi_pin == 22:
-        change_status_B("off")
+    change_status("off", valve_id)
     water_log()
 
-def write_duration1(duration):
-    with open('durationA.txt', 'w') as f:
+def write_duration(duration, valve_id: ValveId):
+    with open(f'duration{valve_id}.txt', 'w') as f:
         f.write(str(duration))
 
-def write_duration2(duration):
-    with open('durationB.txt', 'w') as f:
-        f.write(str(duration))
-
-def change_duration1():
+def change_duration(valve_id: ValveId):
     new_duration = input("Enter time in seconds: ")
     if new_duration.isdigit():
-        write_duration1(new_duration)
-        print(f"Valve A will water for {new_duration} seconds")
+        write_duration(new_duration, valve_id)
+        print(f"Valve {valve_id} will water for {new_duration} seconds")
     else:
         print(">>>Invalid input. Value must be an integer<<<")
         time.sleep(2)
 
-def change_duration2():
-    new_duration = input("Enter time in seconds: ")
-    if new_duration.isdigit():
-        write_duration2(new_duration)
-        print(f"Valve B will water for {new_duration} seconds")
-    else:
-        print(">>>Invalid input. Value must be an integer<<<")
-        time.sleep(2)
-
-
-def add_watering_schedule_A():
+def add_watering_schedule(valve_id: ValveId):
     hour = input("Enter the hour for the watering schedule (0-23): ")
     minute = input("Enter the minute for the watering schedule (0-59): ")
     print(f"Adding new watering schedule at {hour}:{minute}")
+    pi_pin = get_pin(valve_id)
     # cron job implementation: 
-    os.system(f"(crontab -l; echo '{minute} {hour} * * * /home/pi/robognome/CLI/powerto5.py) | crontab -")
+    os.system(f"(crontab -l; echo '{minute} {hour} * * * /home/pi/robognome/CLI/powerto{pi_pin}.py') | crontab -")
 
-def add_watering_schedule_B():
-    hour = input("Enter the hour for the watering schedule (0-23): ")
-    minute = input("Enter the minute for the watering schedule (0-59): ")
-    print(f"Adding new watering schedule at {hour}:{minute}")
-    # cron job implementation: 
-    os.system(f"(crontab -l; echo '{minute} {hour} * * * /home/pi/robognome/CLI/powerto22.py) | crontab -")
+def get_pin(valve_id: ValveId):
+    return 5 if valve_id == "A" else 22
 
+def get_valve_ids() -> list[ValveId]:
+    return ["A", "B"]
 
 def delete_last_watering_schedule():
     print()
@@ -160,12 +128,12 @@ def delete_last_watering_schedule():
     print("************^^^************")
 
 def water_log():
-    statusA = get_status_A()
-    statusB = get_status_B()
+    valve_statuses = [f"{valve_id} {get_status(valve_id)}" for valve_id in get_valve_ids()]
+    delimited_statuses = " | ".join(valve_statuses)
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     with open('water.log', 'a') as f:
-        f.write(f"{current_time} | A {statusA} | B {statusB} ")
+        f.write(f"{current_time} | {delimited_statuses} \n")
 
 
 def print_logs():
@@ -173,6 +141,13 @@ def print_logs():
         for line in f:
             print(line.strip())
 
+def request_valve_choice() -> Union[ValveId, Literal[False]]:
+    valve_choice = input("A or B? ")
+    if not valve_choice in ["A", "B"]:
+        print(f">>> Invalid input ({valve_choice} please enter A or B <<<")
+        time.sleep(2)
+        return False
+    return cast(ValveId, valve_choice)
 
 if __name__ == "__main__":
     welcome_screen()
@@ -182,53 +157,35 @@ if __name__ == "__main__":
         # Menu
         # [1] Turn water on
         if choice == "1":
-            valve_choice = input("A or B? ")
-            if valve_choice == "A":
-                print("Turning on water on A")
-                turn_water_on(5)
-                time.sleep(2)
-            elif valve_choice == "B":
-                print("Turning water on B")
-                turn_water_on(22)
-            else:
-                print(f">>> Invalid input ({valve_choice} please enter A or B <<<")
-                time.sleep(2)
+            valve_choice = request_valve_choice()
+            if not valve_choice:
+                continue
+            print(f"Turning on water on {valve_choice}")
+            turn_water_on(valve_choice)
+            time.sleep(2)
         # [2] Turn water off
         elif choice == "2":
-            valve_choice = input("A or B? ")
-            if valve_choice == "A":
-                print("Turning off water on A")
-                turn_water_off(5)
-                time.sleep(2)
-            elif valve_choice == "B":
-                print("Turning water off B")
-                turn_water_on(22)
-                time.sleep(2)
-            else:
-                print(f">>> Invalid input ({valve_choice} please enter A or B <<<")
-                time.sleep(2)
+            valve_choice = request_valve_choice()
+            if not valve_choice:
+                continue
+            print(f"Turning off water on {valve_choice}")
+            turn_water_off(valve_choice)
+            time.sleep(2)
         # [3] Change Duration
         elif choice == "3":
-            valve_choice = input("A or B? ")
-            if valve_choice == "A":
-                print("Changing duration on valve A")
-                change_duration1()
-                time.sleep(2)
-            elif valve_choice == "B":
-                print("Changing duration on valve B")
-                change_duration2()
-                time.sleep(2)
+            valve_choice = request_valve_choice()
+            if not valve_choice:
+                continue
+            print(f"Changing duration on valve {valve_choice}")
+            change_duration(valve_choice)
+            time.sleep(2)
         # [4] Add New Watering Schedule
         elif choice == "4":
-            valve_choice = input("A or B?")
-            if valve_choice == "A":
-                print("Changing schedule on A")
-                add_watering_schedule_A()
-                time.sleep(2)
-            elif valve_choice == "B":
-                print("Changing schedule on B")
-                add_watering_schedule_B()
-                time.sleep(2)
+            valve_choice = request_valve_choice()
+            if not valve_choice:
+                continue
+            print(f"Changing schedule on {valve_choice}")
+            add_watering_schedule(valve_choice)
         # [5] Delete A Watering Schedule
         elif choice == "5":
             print("Printing deletion instructions")
@@ -244,8 +201,8 @@ if __name__ == "__main__":
         # [7] Show status
         elif choice == "7":
             print("Showing status")
-            get_status_A()
-            get_status_B()
+            for valve_id in get_valve_ids():
+                get_status(valve_id)
             time.sleep(2)
         # [9] Exit
         elif choice == "9":
